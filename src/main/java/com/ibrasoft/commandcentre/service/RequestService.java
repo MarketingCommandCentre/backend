@@ -23,7 +23,10 @@ public class RequestService {
     private final CycleService cycleService;
     
     public List<Request> getAllRequests() {
-        return requestRepository.findAll();
+        return requestRepository.findAll().stream()
+            .sorted(Comparator.comparing(Request::getPostingDate, 
+                Comparator.nullsLast(Comparator.naturalOrder())))
+            .collect(Collectors.toList());
     }
     
     public Optional<Request> getRequestByChannelId(Long channelId) {
