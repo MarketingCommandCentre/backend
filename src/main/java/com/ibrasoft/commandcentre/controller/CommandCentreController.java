@@ -254,6 +254,33 @@ public class CommandCentreController {
         }
     }
     
+    @PatchMapping("/requests/channel/{channelId}/requester/{requesterId}")
+    public ResponseEntity<Request> updateRequester(
+            @PathVariable Long channelId,
+            @PathVariable Long requesterId,
+            @AuthenticationPrincipal OAuth2User principal) {
+        // If authenticated as bot, use a system identifier
+        if (principal == null) {
+            var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName().equals("discord-bot")) {
+                try {
+                    Request updatedRequest = requestService.updateRequester(channelId, requesterId, 0L); // 0 = bot
+                    return ResponseEntity.ok(updatedRequest);
+                } catch (RuntimeException e) {
+                    return ResponseEntity.notFound().build();
+                }
+            }
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        try {
+            Long discordUserId = Long.parseLong(principal.getAttribute("id"));
+            Request updatedRequest = requestService.updateRequester(channelId, requesterId, discordUserId);
+            return ResponseEntity.ok(updatedRequest);
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+    
     // ========== Audit Event Endpoints ==========
     
     @GetMapping("/audit-events")

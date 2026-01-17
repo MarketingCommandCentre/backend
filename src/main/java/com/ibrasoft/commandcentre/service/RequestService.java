@@ -66,7 +66,7 @@ public class RequestService {
         
         // Update Discord-related fields
         request.setChannelID(requestDetails.getChannelID());
-        request.setRequesterID(requestDetails.getRequesterID());
+        // request.setRequesterID(requestDetails.getRequesterID());
         request.setRequesterDepartmentID(requestDetails.getRequesterDepartmentID());
         request.setAssignedToID(requestDetails.getAssignedToID());
         
@@ -170,6 +170,21 @@ public class RequestService {
         Request updatedRequest = requestRepository.save(request);
         auditEventService.logEvent("DEPARTMENT_UPDATE", "Request", channelId, 
             String.format("Requester department changed from %s to %s", previousDepartment, requesterDepartmentID), 
+            String.valueOf(authenticatedUserId));
+        return updatedRequest;
+    }
+    
+    @Transactional
+    public Request updateRequester(Long channelId, Long requesterID, Long authenticatedUserId) {
+        Request request = requestRepository.findById(channelId)
+            .orElseThrow(() -> new RuntimeException("Request not found with channelId: " + channelId));
+        
+        Long previousRequester = request.getRequesterID();
+        request.setRequesterID(requesterID);
+        
+        Request updatedRequest = requestRepository.save(request);
+        auditEventService.logEvent("REQUESTER_UPDATE", "Request", channelId, 
+            String.format("Requester changed from %s to %s", previousRequester, requesterID), 
             String.valueOf(authenticatedUserId));
         return updatedRequest;
     }

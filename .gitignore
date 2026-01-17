@@ -36,3 +36,13 @@ build/
 *application.properties
 
 *.db
+DB_EDITOR_README.md
+db_editor.py
+main_requests_cleaned.csv
+main_requests_reordered.csv
+main_requests.csv
+certs/origin-key.pem
+certs/origin-cert.pem
+requirements_db_editor.txt
+src/main/resources/tls/origin.p12
+src/main/resources/application-prod.properties
