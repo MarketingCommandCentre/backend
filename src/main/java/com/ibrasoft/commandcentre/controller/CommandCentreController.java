@@ -1,6 +1,7 @@
 package com.ibrasoft.commandcentre.controller;
 
 import com.ibrasoft.commandcentre.model.AuditEvent;
+import com.ibrasoft.commandcentre.model.DepartmentCount;
 import com.ibrasoft.commandcentre.model.Request;
 import com.ibrasoft.commandcentre.model.RequestStatus;
 import com.ibrasoft.commandcentre.service.AuditEventService;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+
 
 @RestController
 @RequestMapping("/api")
@@ -280,6 +282,29 @@ public class CommandCentreController {
             return ResponseEntity.notFound().build();
         }
     }
+
+    @GetMapping("/requests/countByDepartment")
+    public ResponseEntity<List<DepartmentCount>> countRequestsByDepartment(@AuthenticationPrincipal OAuth2User principal) {
+        if (principal == null) {
+            var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName().equals("discord-bot")) {
+                try {
+                    List<DepartmentCount> counts = requestService.getRequestCountsByDepartment();
+                    return ResponseEntity.ok(counts);
+                } catch (RuntimeException e) {
+                    return ResponseEntity.notFound().build();
+                }
+            }
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        try {
+            List<DepartmentCount> counts = requestService.getRequestCountsByDepartment();
+            return ResponseEntity.ok(counts);
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+    
     
     // ========== Audit Event Endpoints ==========
     

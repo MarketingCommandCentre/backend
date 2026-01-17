@@ -1,5 +1,6 @@
 package com.ibrasoft.commandcentre.service;
 
+import com.ibrasoft.commandcentre.model.DepartmentCount;
 import com.ibrasoft.commandcentre.model.Request;
 import com.ibrasoft.commandcentre.model.RequestStatus;
 import com.ibrasoft.commandcentre.model.RequestType;
@@ -189,6 +190,11 @@ public class RequestService {
         return updatedRequest;
     }
     
+    @Transactional
+    public List<DepartmentCount> getRequestCountsByDepartment() {
+        return requestRepository.countByDepartment();
+    }
+
     // ========== Workload Aggregation Methods ==========
     
     /**
