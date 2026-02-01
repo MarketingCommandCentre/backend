@@ -9,7 +9,8 @@ import com.ibrasoft.commandcentre.service.RequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 
@@ -55,33 +56,29 @@ public class CommandCentreController {
     }
     
     @GetMapping("/requests/my-requests")
-    public ResponseEntity<List<Request>> getMyRequests(@AuthenticationPrincipal OAuth2User principal) {
-        if (principal == null) {
+    public ResponseEntity<List<Request>> getMyRequests(Authentication authentication) {
+        Long discordUserId = resolveDiscordUserId(authentication);
+        if (discordUserId == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Long discordUserId = Long.parseLong(principal.getAttribute("id"));
         return ResponseEntity.ok(requestService.getRequestsByRequester(discordUserId));
     }
     
     @PostMapping("/requests")
     public ResponseEntity<Request> createRequest(
             @RequestBody Request request,
-            @AuthenticationPrincipal OAuth2User principal) {
-        // If authenticated as bot, use requesterID from request body
-        if (principal == null) {
-            // Check if this is a bot request
-            var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getName().equals("discord-bot")) {
-                // Bot must provide requesterID in the request body
-                if (request.getRequesterID() == null) {
-                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-                }
-                Request createdRequest = requestService.createRequest(request, request.getRequesterID());
-                return ResponseEntity.status(HttpStatus.CREATED).body(createdRequest);
+            Authentication authentication) {
+        if (isBot(authentication)) {
+            if (request.getRequesterID() == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
             }
+            Request createdRequest = requestService.createRequest(request, request.getRequesterID());
+            return ResponseEntity.status(HttpStatus.CREATED).body(createdRequest);
+        }
+        Long discordUserId = resolveDiscordUserId(authentication);
+        if (discordUserId == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Long discordUserId = Long.parseLong(principal.getAttribute("id"));
         Request createdRequest = requestService.createRequest(request, discordUserId);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdRequest);
     }
@@ -90,22 +87,20 @@ public class CommandCentreController {
     public ResponseEntity<Request> updateRequest(
             @PathVariable Long channelId,
             @RequestBody Request request,
-            @AuthenticationPrincipal OAuth2User principal) {
-        // If authenticated as bot, use a system identifier
-        if (principal == null) {
-            var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getName().equals("discord-bot")) {
-                try {
-                    Request updatedRequest = requestService.updateRequest(channelId, request, 0L); // 0 = bot
-                    return ResponseEntity.ok(updatedRequest);
-                } catch (RuntimeException e) {
-                    return ResponseEntity.notFound().build();
-                }
+            Authentication authentication) {
+        if (isBot(authentication)) {
+            try {
+                Request updatedRequest = requestService.updateRequest(channelId, request, 0L); // 0 = bot
+                return ResponseEntity.ok(updatedRequest);
+            } catch (RuntimeException e) {
+                return ResponseEntity.notFound().build();
             }
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Long discordUserId = Long.parseLong(principal.getAttribute("id"));
+            Long discordUserId = resolveDiscordUserId(authentication);
+            if (discordUserId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
             Request updatedRequest = requestService.updateRequest(channelId, request, discordUserId);
             return ResponseEntity.ok(updatedRequest);
         } catch (RuntimeException e) {
@@ -116,22 +111,20 @@ public class CommandCentreController {
     @DeleteMapping("/requests/channel/{channelId}")
     public ResponseEntity<Void> deleteRequest(
             @PathVariable Long channelId,
-            @AuthenticationPrincipal OAuth2User principal) {
-        // If authenticated as bot, use a system identifier
-        if (principal == null) {
-            var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getName().equals("discord-bot")) {
-                try {
-                    requestService.deleteRequest(channelId, 0L); // 0 = bot
-                    return ResponseEntity.noContent().build();
-                } catch (RuntimeException e) {
-                    return ResponseEntity.notFound().build();
-                }
+            Authentication authentication) {
+        if (isBot(authentication)) {
+            try {
+                requestService.deleteRequest(channelId, 0L); // 0 = bot
+                return ResponseEntity.noContent().build();
+            } catch (RuntimeException e) {
+                return ResponseEntity.notFound().build();
             }
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Long discordUserId = Long.parseLong(principal.getAttribute("id"));
+            Long discordUserId = resolveDiscordUserId(authentication);
+            if (discordUserId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
             requestService.deleteRequest(channelId, discordUserId);
             return ResponseEntity.noContent().build();
         } catch (RuntimeException e) {
@@ -143,22 +136,20 @@ public class CommandCentreController {
     public ResponseEntity<Request> assignRequest(
             @PathVariable Long channelId,
             @PathVariable Long assignedToId,
-            @AuthenticationPrincipal OAuth2User principal) {
-        // If authenticated as bot, use a system identifier
-        if (principal == null) {
-            var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getName().equals("discord-bot")) {
-                try {
-                    Request updatedRequest = requestService.assignRequest(channelId, assignedToId, 0L); // 0 = bot
-                    return ResponseEntity.ok(updatedRequest);
-                } catch (RuntimeException e) {
-                    return ResponseEntity.notFound().build();
-                }
+            Authentication authentication) {
+        if (isBot(authentication)) {
+            try {
+                Request updatedRequest = requestService.assignRequest(channelId, assignedToId, 0L); // 0 = bot
+                return ResponseEntity.ok(updatedRequest);
+            } catch (RuntimeException e) {
+                return ResponseEntity.notFound().build();
             }
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Long discordUserId = Long.parseLong(principal.getAttribute("id"));
+            Long discordUserId = resolveDiscordUserId(authentication);
+            if (discordUserId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
             Request updatedRequest = requestService.assignRequest(channelId, assignedToId, discordUserId);
             return ResponseEntity.ok(updatedRequest);
         } catch (RuntimeException e) {
@@ -170,25 +161,23 @@ public class CommandCentreController {
     public ResponseEntity<?> setRequestStatus(
             @PathVariable Long channelId,
             @PathVariable String status,
-            @AuthenticationPrincipal OAuth2User principal) {
-        // If authenticated as bot, use a system identifier
-        if (principal == null) {
-            var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getName().equals("discord-bot")) {
-                try {
-                    RequestStatus requestStatus = RequestStatus.valueOf(status.toUpperCase());
-                    Request updatedRequest = requestService.setRequestStatus(channelId, requestStatus, 0L); // 0 = bot
-                    return ResponseEntity.ok(updatedRequest);
-                } catch (IllegalArgumentException e) {
-                    return ResponseEntity.badRequest().body("Invalid status: " + status);
-                } catch (RuntimeException e) {
-                    return ResponseEntity.notFound().build();
-                }
+            Authentication authentication) {
+        if (isBot(authentication)) {
+            try {
+                RequestStatus requestStatus = RequestStatus.valueOf(status.toUpperCase());
+                Request updatedRequest = requestService.setRequestStatus(channelId, requestStatus, 0L); // 0 = bot
+                return ResponseEntity.ok(updatedRequest);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body("Invalid status: " + status);
+            } catch (RuntimeException e) {
+                return ResponseEntity.notFound().build();
             }
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Long discordUserId = Long.parseLong(principal.getAttribute("id"));
+            Long discordUserId = resolveDiscordUserId(authentication);
+            if (discordUserId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
             RequestStatus requestStatus = RequestStatus.valueOf(status.toUpperCase());
             Request updatedRequest = requestService.setRequestStatus(channelId, requestStatus, discordUserId);
             return ResponseEntity.ok(updatedRequest);
@@ -202,24 +191,22 @@ public class CommandCentreController {
     @PatchMapping("/requests/channel/{channelId}/advance")
     public ResponseEntity<?> advanceRequestToNextStatus(
             @PathVariable Long channelId,
-            @AuthenticationPrincipal OAuth2User principal) {
-        // If authenticated as bot, use a system identifier
-        if (principal == null) {
-            var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getName().equals("discord-bot")) {
-                try {
-                    Request updatedRequest = requestService.advanceRequestToNextStatus(channelId, 0L); // 0 = bot
-                    return ResponseEntity.ok(updatedRequest);
-                } catch (IllegalStateException e) {
-                    return ResponseEntity.badRequest().body(e.getMessage());
-                } catch (RuntimeException e) {
-                    return ResponseEntity.notFound().build();
-                }
+            Authentication authentication) {
+        if (isBot(authentication)) {
+            try {
+                Request updatedRequest = requestService.advanceRequestToNextStatus(channelId, 0L); // 0 = bot
+                return ResponseEntity.ok(updatedRequest);
+            } catch (IllegalStateException e) {
+                return ResponseEntity.badRequest().body(e.getMessage());
+            } catch (RuntimeException e) {
+                return ResponseEntity.notFound().build();
             }
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Long discordUserId = Long.parseLong(principal.getAttribute("id"));
+            Long discordUserId = resolveDiscordUserId(authentication);
+            if (discordUserId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
             Request updatedRequest = requestService.advanceRequestToNextStatus(channelId, discordUserId);
             return ResponseEntity.ok(updatedRequest);
         } catch (IllegalStateException e) {
@@ -233,22 +220,20 @@ public class CommandCentreController {
     public ResponseEntity<Request> updateRequesterDepartment(
             @PathVariable Long channelId,
             @PathVariable Long departmentId,
-            @AuthenticationPrincipal OAuth2User principal) {
-        // If authenticated as bot, use a system identifier
-        if (principal == null) {
-            var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getName().equals("discord-bot")) {
-                try {
-                    Request updatedRequest = requestService.updateRequesterDepartment(channelId, departmentId, 0L); // 0 = bot
-                    return ResponseEntity.ok(updatedRequest);
-                } catch (RuntimeException e) {
-                    return ResponseEntity.notFound().build();
-                }
+            Authentication authentication) {
+        if (isBot(authentication)) {
+            try {
+                Request updatedRequest = requestService.updateRequesterDepartment(channelId, departmentId, 0L); // 0 = bot
+                return ResponseEntity.ok(updatedRequest);
+            } catch (RuntimeException e) {
+                return ResponseEntity.notFound().build();
             }
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Long discordUserId = Long.parseLong(principal.getAttribute("id"));
+            Long discordUserId = resolveDiscordUserId(authentication);
+            if (discordUserId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
             Request updatedRequest = requestService.updateRequesterDepartment(channelId, departmentId, discordUserId);
             return ResponseEntity.ok(updatedRequest);
         } catch (RuntimeException e) {
@@ -260,22 +245,20 @@ public class CommandCentreController {
     public ResponseEntity<Request> updateRequester(
             @PathVariable Long channelId,
             @PathVariable Long requesterId,
-            @AuthenticationPrincipal OAuth2User principal) {
-        // If authenticated as bot, use a system identifier
-        if (principal == null) {
-            var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getName().equals("discord-bot")) {
-                try {
-                    Request updatedRequest = requestService.updateRequester(channelId, requesterId, 0L); // 0 = bot
-                    return ResponseEntity.ok(updatedRequest);
-                } catch (RuntimeException e) {
-                    return ResponseEntity.notFound().build();
-                }
+            Authentication authentication) {
+        if (isBot(authentication)) {
+            try {
+                Request updatedRequest = requestService.updateRequester(channelId, requesterId, 0L); // 0 = bot
+                return ResponseEntity.ok(updatedRequest);
+            } catch (RuntimeException e) {
+                return ResponseEntity.notFound().build();
             }
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Long discordUserId = Long.parseLong(principal.getAttribute("id"));
+            Long discordUserId = resolveDiscordUserId(authentication);
+            if (discordUserId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
             Request updatedRequest = requestService.updateRequester(channelId, requesterId, discordUserId);
             return ResponseEntity.ok(updatedRequest);
         } catch (RuntimeException e) {
@@ -284,17 +267,8 @@ public class CommandCentreController {
     }
 
     @GetMapping("/requests/countByDepartment")
-    public ResponseEntity<List<DepartmentCount>> countRequestsByDepartment(@AuthenticationPrincipal OAuth2User principal) {
-        if (principal == null) {
-            var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getName().equals("discord-bot")) {
-                try {
-                    List<DepartmentCount> counts = requestService.getRequestCountsByDepartment();
-                    return ResponseEntity.ok(counts);
-                } catch (RuntimeException e) {
-                    return ResponseEntity.notFound().build();
-                }
-            }
+    public ResponseEntity<List<DepartmentCount>> countRequestsByDepartment(Authentication authentication) {
+        if (!isBot(authentication) && resolveDiscordUserId(authentication) == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
@@ -356,5 +330,39 @@ public class CommandCentreController {
         AuditEvent auditEvent = auditEventService.logEvent(
             eventType, entityType, entityId, eventDetails, performedBy);
         return ResponseEntity.status(HttpStatus.CREATED).body(auditEvent);
+    }
+
+    private Long resolveDiscordUserId(Authentication authentication) {
+        if (authentication == null) {
+            return null;
+        }
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof OAuth2User oauth2User) {
+            String id = oauth2User.getAttribute("id");
+            if (id == null) {
+                return null;
+            }
+            return Long.parseLong(id);
+        }
+        if (principal instanceof String principalId) {
+            try {
+                return Long.parseLong(principalId);
+            } catch (NumberFormatException ex) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private boolean isBot(Authentication authentication) {
+        if (authentication == null) {
+            return false;
+        }
+        for (GrantedAuthority authority : authentication.getAuthorities()) {
+            if ("ROLE_BOT".equals(authority.getAuthority())) {
+                return true;
+            }
+        }
+        return false;
     }
 }
