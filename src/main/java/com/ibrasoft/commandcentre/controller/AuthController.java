@@ -5,12 +5,10 @@ import com.ibrasoft.commandcentre.model.Role;
 import com.ibrasoft.commandcentre.security.JwtService;
 import com.ibrasoft.commandcentre.service.DiscordService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -25,9 +23,6 @@ public class AuthController {
     
     private final DiscordService discordService;
     private final JwtService jwtService;
-
-    @Value("${bot.api.key:}")
-    private String botApiKey;
     
     @GetMapping("/success")
     public ResponseEntity<Map<String, Object>> loginSuccess(Authentication authentication) {
@@ -107,22 +102,6 @@ public class AuthController {
         }
         
         return ResponseEntity.status(500).build();
-    }
-
-    @PostMapping("/bot-token")
-    public ResponseEntity<Map<String, Object>> issueBotToken(
-                                                             @org.springframework.web.bind.annotation.RequestHeader(
-                                                                 name = "X-Bot-Key",
-                                                                 required = false
-                                                             ) String botKey) {
-        if (botApiKey == null || botApiKey.isBlank()) {
-            return ResponseEntity.status(500).body(Map.of("error", "Bot API key not configured"));
-        }
-        if (botKey == null || !botApiKey.equals(botKey)) {
-            return ResponseEntity.status(401).body(Map.of("error", "Invalid bot key"));
-        }
-        String token = jwtService.generateBotToken("discord-bot", List.of(Role.ROLE_BOT));
-        return ResponseEntity.ok(Map.of("token", token));
     }
     
     // Helper method - you'll need to inject OAuth2AuthorizedClientService
