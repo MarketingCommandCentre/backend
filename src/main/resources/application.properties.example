@@ -1,0 +1,12 @@
+app.frontend.url=http://localhost:5173
+
+discord.required.guild.id=
+
+# JWT settings - supply a Base64-encoded secret value via environment overrides
+security.jwt.secret=
+security.jwt.issuer=command-centre
+security.jwt.user-ttl-seconds=604800
+security.jwt.bot-ttl-seconds=31536000
+
+# Shared secret for issuing bot JWTs
+bot.api.key=

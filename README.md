@@ -30,6 +30,11 @@ This is a Spring Boot backend API using SQLite as the database with comprehensiv
 
 ## API Endpoints
 
+### Authentication Endpoints
+- `GET /api/auth/success` - OAuth success payload (includes JWT)
+- `GET /api/auth/user` - Current user info (JWT or OAuth)
+- `POST /api/auth/bot-token` - Issue long-lived bot JWT (requires `X-Bot-Key`)
+
 ### Request Endpoints
 - `GET /api/requests` - Get all requests
 - `GET /api/requests/{id}` - Get request by ID
@@ -74,10 +79,11 @@ mvn spring-boot:run
 The application will start on `http://localhost:8080`
 
 ## Configuration
-Configuration can be found in `src/main/resources/application.properties`:
+Configuration can be found in `src/main/resources/application.properties.example` (copy to `application.properties` or supply env overrides):
 - Database connection settings
 - JPA/Hibernate settings
-- Security settings (currently disabled for development)
+- Discord OAuth + guild requirements
+- JWT settings for user and bot authentication (provide a Base64 secret)
 
 ## Features
 ✅ RESTful API with JSON responses
@@ -85,7 +91,7 @@ Configuration can be found in `src/main/resources/application.properties`:
 ✅ SQLite database with JPA/Hibernate
 ✅ CORS enabled for frontend integration
 ✅ Lombok for clean code
-✅ Spring Security excluded for easy development (can be enabled later)
+✅ Spring Security with Discord OAuth + JWT authentication
 ✅ Comprehensive error handling
 
 ## Next Steps
