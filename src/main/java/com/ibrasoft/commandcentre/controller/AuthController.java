@@ -6,6 +6,7 @@ import com.ibrasoft.commandcentre.security.JwtService;
 import com.ibrasoft.commandcentre.service.DiscordService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -57,7 +58,7 @@ public class AuthController {
     
     @GetMapping("/user")
     public ResponseEntity<Map<String, Object>> getCurrentUser(Authentication authentication) {
-        if (authentication == null) {
+        if (authentication == null || authentication instanceof AnonymousAuthenticationToken) {
             return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
         }
         Object principal = authentication.getPrincipal();
@@ -71,6 +72,7 @@ public class AuthController {
             return ResponseEntity.ok(response);
         }
         if (principal instanceof String userId) {
+            // This handles JWT authentication where the principal is the subject (user ID)
             return ResponseEntity.ok(Map.of("id", userId));
         }
         return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
