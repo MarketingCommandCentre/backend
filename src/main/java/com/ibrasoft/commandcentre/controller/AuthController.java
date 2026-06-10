@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,10 +23,11 @@ import java.util.Map;
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
-    
+
     private final DiscordService discordService;
     private final JwtService jwtService;
-    
+    private final OAuth2AuthorizedClientService authorizedClientService;
+
     @GetMapping("/success")
     public ResponseEntity<Map<String, Object>> loginSuccess(Authentication authentication) {
         OAuth2User principal = authentication != null && authentication.getPrincipal() instanceof OAuth2User user
@@ -47,7 +50,7 @@ public class AuthController {
         ));
         return ResponseEntity.ok(response);
     }
-    
+
     @GetMapping("/failure")
     public ResponseEntity<Map<String, Object>> loginFailure() {
         Map<String, Object> response = new HashMap<>();
@@ -55,7 +58,7 @@ public class AuthController {
         response.put("message", "Authentication with Discord failed");
         return ResponseEntity.status(401).body(response);
     }
-    
+
     @GetMapping("/user")
     public ResponseEntity<Map<String, Object>> getCurrentUser(Authentication authentication) {
         if (authentication == null || authentication instanceof AnonymousAuthenticationToken) {
@@ -77,38 +80,21 @@ public class AuthController {
         }
         return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
     }
-    
+
     @GetMapping("/guilds")
     public ResponseEntity<List<DiscordGuild>> getUserGuilds(Authentication authentication) {
-        OAuth2User principal = authentication != null && authentication.getPrincipal() instanceof OAuth2User user
-            ? user
-            : null;
-        if (principal == null) {
+        if (!(authentication.getPrincipal() instanceof OAuth2User)) {
             return ResponseEntity.status(401).build();
         }
-        
-        String userId = principal.getAttribute("id");
         try {
-            // This requires the user's access token which we can get from the authorized client
-            org.springframework.security.oauth2.client.OAuth2AuthorizedClient client = 
-                getAuthorizedClient(userId);
-            
-            if (client != null) {
-                List<DiscordGuild> guilds = discordService.getUserGuilds(
-                    client.getAccessToken().getTokenValue()
-                );
-                return ResponseEntity.ok(guilds);
+            OAuth2AuthorizedClient client = authorizedClientService.loadAuthorizedClient("discord", authentication.getName());
+            if (client == null) {
+                return ResponseEntity.status(401).build();
             }
+            List<DiscordGuild> guilds = discordService.getUserGuilds(client.getAccessToken().getTokenValue());
+            return ResponseEntity.ok(guilds);
         } catch (Exception e) {
             return ResponseEntity.status(500).build();
         }
-        
-        return ResponseEntity.status(500).build();
-    }
-    
-    // Helper method - you'll need to inject OAuth2AuthorizedClientService
-    private org.springframework.security.oauth2.client.OAuth2AuthorizedClient getAuthorizedClient(String principalName) {
-        // This is a placeholder - in production you'd inject OAuth2AuthorizedClientService
-        return null;
     }
 }

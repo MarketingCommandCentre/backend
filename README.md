@@ -101,3 +101,17 @@ Configuration can be found in `src/main/resources/application.properties.example
 - Enable and configure Spring Security
 - Add API documentation (Swagger/OpenAPI)
 - Write integration tests
+
+## License
+
+Copyright (C) 2026 Ibrahim Chehab
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the **GNU General Public License v3.0** as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the [GNU General Public License](./LICENSE) for more
+details, or visit <https://www.gnu.org/licenses/gpl-3.0.html>.

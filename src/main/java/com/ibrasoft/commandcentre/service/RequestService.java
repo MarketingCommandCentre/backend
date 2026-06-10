@@ -1,5 +1,6 @@
 package com.ibrasoft.commandcentre.service;
 
+import com.ibrasoft.commandcentre.audit.Actor;
 import com.ibrasoft.commandcentre.model.DepartmentCount;
 import com.ibrasoft.commandcentre.model.Request;
 import com.ibrasoft.commandcentre.model.RequestStatus;
@@ -18,121 +19,112 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class RequestService {
-    
+
     private final RequestRepository requestRepository;
     private final AuditEventService auditEventService;
     private final CycleService cycleService;
-    
+
     public List<Request> getAllRequests() {
         return requestRepository.findAll().stream()
-            .sorted(Comparator.comparing(Request::getPostingDate, 
+            .sorted(Comparator.comparing(Request::getPostingDate,
                 Comparator.nullsLast(Comparator.naturalOrder())))
             .collect(Collectors.toList());
     }
-    
+
     public Optional<Request> getRequestByChannelId(Long channelId) {
         return requestRepository.findById(channelId);
     }
-    
+
     public List<Request> getRequestsByStatus(RequestStatus status) {
         return requestRepository.findByStatus(status);
     }
-    
+
     public List<Request> getRequestsByRequester(Long requesterID) {
         return requestRepository.findByRequesterID(requesterID);
     }
-    
+
     public List<Request> getRequestsByAssignedTo(Long assignedToID) {
         return requestRepository.findByAssignedToID(assignedToID);
     }
-    
+
     @Transactional
-    public Request createRequest(Request request, Long authenticatedUserId) {
-        // Optionally verify the requester matches the authenticated user
-        // or automatically set it if not provided
-        if (request.getRequesterID() == null) {
-            request.setRequesterID(authenticatedUserId);
+    public Request createRequest(Request request, Actor actor) {
+        if (request.getRequesterID() == null && actor.kind() == Actor.Kind.USER) {
+            request.setRequesterID(actor.discordUserId());
         }
-        
+
         Request savedRequest = requestRepository.save(request);
-        auditEventService.logEvent("CREATE", "Request", savedRequest.getChannelID(), 
-            "Request created: " + savedRequest.getTitle(), String.valueOf(authenticatedUserId));
+        auditEventService.logRequestEvent("CREATE", savedRequest.getChannelID(),
+            "Request created: " + savedRequest.getTitle(), actor);
         return savedRequest;
     }
-    
+
     @Transactional
-    public Request updateRequest(Long channelId, Request requestDetails, Long authenticatedUserId) {
+    public Request updateRequest(Long channelId, Request requestDetails, Actor actor) {
         Request request = requestRepository.findById(channelId)
             .orElseThrow(() -> new RuntimeException("Request not found with channelId: " + channelId));
-        
-        // Update Discord-related fields
-        request.setChannelID(requestDetails.getChannelID());
-        // request.setRequesterID(requestDetails.getRequesterID());
+
         request.setRequesterDepartmentID(requestDetails.getRequesterDepartmentID());
         request.setAssignedToID(requestDetails.getAssignedToID());
-        
-        // Update marketing request fields
+
         request.setTitle(requestDetails.getTitle());
         request.setDescription(requestDetails.getDescription());
         request.setStatus(requestDetails.getStatus());
         request.setPostingDate(requestDetails.getPostingDate());
         request.setRoom(requestDetails.getRoom());
         request.setSignupUrl(requestDetails.getSignupUrl());
-        
+
         Request updatedRequest = requestRepository.save(request);
-        auditEventService.logEvent("UPDATE", "Request", updatedRequest.getChannelID(), 
-            "Request updated: " + updatedRequest.getTitle(), String.valueOf(authenticatedUserId));
+        auditEventService.logRequestEvent("UPDATE", updatedRequest.getChannelID(),
+            "Request updated: " + updatedRequest.getTitle(), actor);
         return updatedRequest;
     }
-    
+
     @Transactional
-    public void deleteRequest(Long channelId, Long authenticatedUserId) {
+    public void deleteRequest(Long channelId, Actor actor) {
         Request request = requestRepository.findById(channelId)
             .orElseThrow(() -> new RuntimeException("Request not found with channelId: " + channelId));
-        
-        auditEventService.logEvent("DELETE", "Request", channelId, 
-            "Request deleted: " + request.getTitle(), String.valueOf(authenticatedUserId));
+
+        auditEventService.logRequestEvent("DELETE", channelId,
+            "Request deleted: " + request.getTitle(), actor);
         requestRepository.deleteById(channelId);
     }
-    
+
     @Transactional
-    public Request assignRequest(Long channelId, Long assignedToId, Long authenticatedUserId) {
+    public Request assignRequest(Long channelId, Long assignedToId, Actor actor) {
         Request request = requestRepository.findById(channelId)
             .orElseThrow(() -> new RuntimeException("Request not found with channelId: " + channelId));
-        
+
         Long previousAssignee = request.getAssignedToID();
         request.setAssignedToID(assignedToId);
-        
+
         Request updatedRequest = requestRepository.save(request);
-        auditEventService.logEvent("ASSIGN", "Request", channelId, 
-            String.format("Request assigned from %s to %s", previousAssignee, assignedToId), 
-            String.valueOf(authenticatedUserId));
+        auditEventService.logRequestEvent("ASSIGN", channelId,
+            String.format("Request assigned from %s to %s", previousAssignee, assignedToId), actor);
         return updatedRequest;
     }
-    
+
     @Transactional
-    public Request setRequestStatus(Long channelId, RequestStatus status, Long authenticatedUserId) {
+    public Request setRequestStatus(Long channelId, RequestStatus status, Actor actor) {
         Request request = requestRepository.findById(channelId)
             .orElseThrow(() -> new RuntimeException("Request not found with channelId: " + channelId));
-        
+
         RequestStatus previousStatus = request.getStatus();
         request.setStatus(status);
-        
+
         Request updatedRequest = requestRepository.save(request);
-        auditEventService.logEvent("STATUS_CHANGE", "Request", channelId, 
-            String.format("Status changed from %s to %s", previousStatus.getDisplayName(), status.getDisplayName()), 
-            String.valueOf(authenticatedUserId));
+        auditEventService.logRequestEvent("STATUS_CHANGE", channelId,
+            String.format("Status changed from %s to %s", previousStatus.getDisplayName(), status.getDisplayName()), actor);
         return updatedRequest;
     }
-    
+
     @Transactional
-    public Request advanceRequestToNextStatus(Long channelId, Long authenticatedUserId) {
+    public Request advanceRequestToNextStatus(Long channelId, Actor actor) {
         Request request = requestRepository.findById(channelId)
             .orElseThrow(() -> new RuntimeException("Request not found with channelId: " + channelId));
-        
+
         RequestStatus currentStatus = request.getStatus();
-        
-        // Define the status progression
+
         RequestStatus nextStatus;
         switch (currentStatus) {
             case IN_QUEUE:
@@ -151,58 +143,50 @@ public class RequestService {
             default:
                 throw new IllegalStateException("Unknown status: " + currentStatus);
         }
-        
+
         request.setStatus(nextStatus);
         Request updatedRequest = requestRepository.save(request);
-        auditEventService.logEvent("STATUS_ADVANCE", "Request", channelId, 
-            String.format("Status advanced from %s to %s", currentStatus.getDisplayName(), nextStatus.getDisplayName()), 
-            String.valueOf(authenticatedUserId));
+        auditEventService.logRequestEvent("STATUS_ADVANCE", channelId,
+            String.format("Status advanced from %s to %s", currentStatus.getDisplayName(), nextStatus.getDisplayName()), actor);
         return updatedRequest;
     }
-    
+
     @Transactional
-    public Request updateRequesterDepartment(Long channelId, Long requesterDepartmentID, Long authenticatedUserId) {
+    public Request updateRequesterDepartment(Long channelId, Long requesterDepartmentID, Actor actor) {
         Request request = requestRepository.findById(channelId)
             .orElseThrow(() -> new RuntimeException("Request not found with channelId: " + channelId));
-        
+
         Long previousDepartment = request.getRequesterDepartmentID();
         request.setRequesterDepartmentID(requesterDepartmentID);
-        
+
         Request updatedRequest = requestRepository.save(request);
-        auditEventService.logEvent("DEPARTMENT_UPDATE", "Request", channelId, 
-            String.format("Requester department changed from %s to %s", previousDepartment, requesterDepartmentID), 
-            String.valueOf(authenticatedUserId));
+        auditEventService.logRequestEvent("DEPARTMENT_UPDATE", channelId,
+            String.format("Requester department changed from %s to %s", previousDepartment, requesterDepartmentID), actor);
         return updatedRequest;
     }
-    
+
     @Transactional
-    public Request updateRequester(Long channelId, Long requesterID, Long authenticatedUserId) {
+    public Request updateRequester(Long channelId, Long requesterID, Actor actor) {
         Request request = requestRepository.findById(channelId)
             .orElseThrow(() -> new RuntimeException("Request not found with channelId: " + channelId));
-        
+
         Long previousRequester = request.getRequesterID();
         request.setRequesterID(requesterID);
-        
+
         Request updatedRequest = requestRepository.save(request);
-        auditEventService.logEvent("REQUESTER_UPDATE", "Request", channelId, 
-            String.format("Requester changed from %s to %s", previousRequester, requesterID), 
-            String.valueOf(authenticatedUserId));
+        auditEventService.logRequestEvent("REQUESTER_UPDATE", channelId,
+            String.format("Requester changed from %s to %s", previousRequester, requesterID), actor);
         return updatedRequest;
     }
-    
+
     @Transactional
     public List<DepartmentCount> getRequestCountsByDepartment() {
         return requestRepository.countByDepartment();
     }
 
-    // ========== Workload Aggregation Methods ==========
-    
-    /**
-     * Get workload for content creators (REEL type requests in current development cycle)
-     */
     public List<Request> getContentCreatorWorkload() {
         CycleService.CycleInfo currentCycle = cycleService.getCurrentDevelopmentCycle();
-        
+
         return requestRepository.findAll().stream()
             .filter(request -> request.getRequestType() == RequestType.REEL)
             .filter(request -> request.getPostingDate() != null)
@@ -210,13 +194,10 @@ public class RequestService {
             .sorted(Comparator.comparing(Request::getPostingDate))
             .collect(Collectors.toList());
     }
-    
-    /**
-     * Get workload for graphic designers (POST type requests in current development cycle)
-     */
+
     public List<Request> getGraphicDesignerWorkload() {
         CycleService.CycleInfo currentCycle = cycleService.getCurrentDevelopmentCycle();
-        
+
         return requestRepository.findAll().stream()
             .filter(request -> request.getRequestType() == RequestType.POST)
             .filter(request -> request.getPostingDate() != null)
@@ -224,25 +205,19 @@ public class RequestService {
             .sorted(Comparator.comparing(Request::getPostingDate))
             .collect(Collectors.toList());
     }
-    
-    /**
-     * Get workload for social media managers (all requests in current posting cycle)
-     */
+
     public List<Request> getSocialMediaManagerWorkload() {
         CycleService.CycleInfo currentPostingCycle = cycleService.getCurrentPostingCycle();
-        
+
         return requestRepository.findAll().stream()
             .filter(request -> request.getPostingDate() != null)
             .filter(request -> isInCyclePostingPeriod(request.getPostingDate(), currentPostingCycle))
             .sorted(Comparator.comparing(Request::getPostingDate))
             .collect(Collectors.toList());
     }
-    
-    /**
-     * Helper method to check if a posting date falls within a cycle's posting period
-     */
+
     private boolean isInCyclePostingPeriod(LocalDate postingDate, CycleService.CycleInfo cycle) {
-        return !postingDate.isBefore(cycle.getPostingStart()) 
+        return !postingDate.isBefore(cycle.getPostingStart())
             && !postingDate.isAfter(cycle.getPostingEnd());
     }
 }

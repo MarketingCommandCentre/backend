@@ -1,5 +1,8 @@
 package com.ibrasoft.commandcentre.controller;
 
+import com.ibrasoft.commandcentre.audit.Actor;
+import com.ibrasoft.commandcentre.audit.AuthenticationActorResolver;
+import com.ibrasoft.commandcentre.audit.AuthenticationActorResolver.ActorResolutionException;
 import com.ibrasoft.commandcentre.model.AuditEvent;
 import com.ibrasoft.commandcentre.model.DepartmentCount;
 import com.ibrasoft.commandcentre.model.Request;
@@ -10,8 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.oauth2.core.user.OAuth2User;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -22,245 +24,207 @@ import java.util.List;
 @RequestMapping("/api")
 @RequiredArgsConstructor
 public class CommandCentreController {
-    
+
+    private static final String ON_BEHALF_OF_HEADER = "X-Discord-User-Id";
+
     private final RequestService requestService;
     private final AuditEventService auditEventService;
-    
+    private final AuthenticationActorResolver actorResolver;
+
     // ========== Request Endpoints ==========
-    
+
     @GetMapping("/requests")
     public ResponseEntity<List<Request>> getAllRequests() {
         return ResponseEntity.ok(requestService.getAllRequests());
     }
-    
+
     @GetMapping("/requests/channel/{channelId}")
     public ResponseEntity<Request> getRequestByChannelId(@PathVariable Long channelId) {
         return requestService.getRequestByChannelId(channelId)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }
-    
+
     @GetMapping("/requests/status/{status}")
     public ResponseEntity<List<Request>> getRequestsByStatus(@PathVariable RequestStatus status) {
         return ResponseEntity.ok(requestService.getRequestsByStatus(status));
     }
-    
+
     @GetMapping("/requests/requester/{requesterId}")
     public ResponseEntity<List<Request>> getRequestsByRequester(@PathVariable Long requesterId) {
         return ResponseEntity.ok(requestService.getRequestsByRequester(requesterId));
     }
-    
+
     @GetMapping("/requests/assigned/{assignedToId}")
     public ResponseEntity<List<Request>> getRequestsByAssignedTo(@PathVariable Long assignedToId) {
         return ResponseEntity.ok(requestService.getRequestsByAssignedTo(assignedToId));
     }
-    
+
     @GetMapping("/requests/my-requests")
     public ResponseEntity<List<Request>> getMyRequests(Authentication authentication) {
-        Long discordUserId = resolveDiscordUserId(authentication);
-        if (discordUserId == null) {
+        Actor actor;
+        try {
+            actor = actorResolver.resolve(authentication, null);
+        } catch (ActorResolutionException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        return ResponseEntity.ok(requestService.getRequestsByRequester(discordUserId));
+        if (actor.kind() != Actor.Kind.USER) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return ResponseEntity.ok(requestService.getRequestsByRequester(actor.discordUserId()));
     }
-    
+
     @PostMapping("/requests")
     public ResponseEntity<Request> createRequest(
-            @RequestBody Request request,
+            @Valid @RequestBody Request request,
+            @RequestHeader(value = ON_BEHALF_OF_HEADER, required = false) Long onBehalfOfUserId,
             Authentication authentication) {
-        if (isBot(authentication)) {
-            if (request.getRequesterID() == null) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-            }
-            Request createdRequest = requestService.createRequest(request, request.getRequesterID());
-            return ResponseEntity.status(HttpStatus.CREATED).body(createdRequest);
-        }
-        Long discordUserId = resolveDiscordUserId(authentication);
-        if (discordUserId == null) {
+        Actor actor;
+        try {
+            Long obo = onBehalfOfUserId != null ? onBehalfOfUserId : request.getRequesterID();
+            actor = actorResolver.resolve(authentication, actorResolver.isBot(authentication) ? obo : null);
+        } catch (ActorResolutionException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Request createdRequest = requestService.createRequest(request, discordUserId);
+        if (actorResolver.isBot(authentication) && request.getRequesterID() == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        }
+        Request createdRequest = requestService.createRequest(request, actor);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdRequest);
     }
-    
+
     @PutMapping("/requests/channel/{channelId}")
     public ResponseEntity<Request> updateRequest(
             @PathVariable Long channelId,
-            @RequestBody Request request,
+            @Valid @RequestBody Request request,
+            @RequestHeader(value = ON_BEHALF_OF_HEADER, required = false) Long onBehalfOfUserId,
             Authentication authentication) {
-        if (isBot(authentication)) {
-            try {
-                Request updatedRequest = requestService.updateRequest(channelId, request, 0L); // 0 = bot
-                return ResponseEntity.ok(updatedRequest);
-            } catch (RuntimeException e) {
-                return ResponseEntity.notFound().build();
-            }
+        Actor actor;
+        try {
+            actor = actorResolver.resolve(authentication, onBehalfOfUserId);
+        } catch (ActorResolutionException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Long discordUserId = resolveDiscordUserId(authentication);
-            if (discordUserId == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
-            Request updatedRequest = requestService.updateRequest(channelId, request, discordUserId);
-            return ResponseEntity.ok(updatedRequest);
+            return ResponseEntity.ok(requestService.updateRequest(channelId, request, actor));
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
     }
-    
+
     @DeleteMapping("/requests/channel/{channelId}")
     public ResponseEntity<Void> deleteRequest(
             @PathVariable Long channelId,
+            @RequestHeader(value = ON_BEHALF_OF_HEADER, required = false) Long onBehalfOfUserId,
             Authentication authentication) {
-        if (isBot(authentication)) {
-            try {
-                requestService.deleteRequest(channelId, 0L); // 0 = bot
-                return ResponseEntity.noContent().build();
-            } catch (RuntimeException e) {
-                return ResponseEntity.notFound().build();
-            }
+        Actor actor;
+        try {
+            actor = actorResolver.resolve(authentication, onBehalfOfUserId);
+        } catch (ActorResolutionException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Long discordUserId = resolveDiscordUserId(authentication);
-            if (discordUserId == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
-            requestService.deleteRequest(channelId, discordUserId);
+            requestService.deleteRequest(channelId, actor);
             return ResponseEntity.noContent().build();
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
     }
-    
+
     @PatchMapping("/requests/channel/{channelId}/assign/{assignedToId}")
     public ResponseEntity<Request> assignRequest(
             @PathVariable Long channelId,
             @PathVariable Long assignedToId,
+            @RequestHeader(value = ON_BEHALF_OF_HEADER, required = false) Long onBehalfOfUserId,
             Authentication authentication) {
-        if (isBot(authentication)) {
-            try {
-                Request updatedRequest = requestService.assignRequest(channelId, assignedToId, 0L); // 0 = bot
-                return ResponseEntity.ok(updatedRequest);
-            } catch (RuntimeException e) {
-                return ResponseEntity.notFound().build();
-            }
+        Actor actor;
+        try {
+            actor = actorResolver.resolve(authentication, onBehalfOfUserId);
+        } catch (ActorResolutionException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Long discordUserId = resolveDiscordUserId(authentication);
-            if (discordUserId == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
-            Request updatedRequest = requestService.assignRequest(channelId, assignedToId, discordUserId);
-            return ResponseEntity.ok(updatedRequest);
+            return ResponseEntity.ok(requestService.assignRequest(channelId, assignedToId, actor));
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
     }
-    
+
     @PatchMapping("/requests/channel/{channelId}/status/{status}")
     public ResponseEntity<?> setRequestStatus(
             @PathVariable Long channelId,
             @PathVariable String status,
+            @RequestHeader(value = ON_BEHALF_OF_HEADER, required = false) Long onBehalfOfUserId,
             Authentication authentication) {
-        if (isBot(authentication)) {
-            try {
-                RequestStatus requestStatus = RequestStatus.valueOf(status.toUpperCase());
-                Request updatedRequest = requestService.setRequestStatus(channelId, requestStatus, 0L); // 0 = bot
-                return ResponseEntity.ok(updatedRequest);
-            } catch (IllegalArgumentException e) {
-                return ResponseEntity.badRequest().body("Invalid status: " + status);
-            } catch (RuntimeException e) {
-                return ResponseEntity.notFound().build();
-            }
+        Actor actor;
+        try {
+            actor = actorResolver.resolve(authentication, onBehalfOfUserId);
+        } catch (ActorResolutionException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Long discordUserId = resolveDiscordUserId(authentication);
-            if (discordUserId == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
             RequestStatus requestStatus = RequestStatus.valueOf(status.toUpperCase());
-            Request updatedRequest = requestService.setRequestStatus(channelId, requestStatus, discordUserId);
-            return ResponseEntity.ok(updatedRequest);
+            return ResponseEntity.ok(requestService.setRequestStatus(channelId, requestStatus, actor));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body("Invalid status: " + status);
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
     }
-    
+
     @PatchMapping("/requests/channel/{channelId}/advance")
     public ResponseEntity<?> advanceRequestToNextStatus(
             @PathVariable Long channelId,
+            @RequestHeader(value = ON_BEHALF_OF_HEADER, required = false) Long onBehalfOfUserId,
             Authentication authentication) {
-        if (isBot(authentication)) {
-            try {
-                Request updatedRequest = requestService.advanceRequestToNextStatus(channelId, 0L); // 0 = bot
-                return ResponseEntity.ok(updatedRequest);
-            } catch (IllegalStateException e) {
-                return ResponseEntity.badRequest().body(e.getMessage());
-            } catch (RuntimeException e) {
-                return ResponseEntity.notFound().build();
-            }
+        Actor actor;
+        try {
+            actor = actorResolver.resolve(authentication, onBehalfOfUserId);
+        } catch (ActorResolutionException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Long discordUserId = resolveDiscordUserId(authentication);
-            if (discordUserId == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
-            Request updatedRequest = requestService.advanceRequestToNextStatus(channelId, discordUserId);
-            return ResponseEntity.ok(updatedRequest);
+            return ResponseEntity.ok(requestService.advanceRequestToNextStatus(channelId, actor));
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
     }
-    
+
     @PatchMapping("/requests/channel/{channelId}/department/{departmentId}")
     public ResponseEntity<Request> updateRequesterDepartment(
             @PathVariable Long channelId,
             @PathVariable Long departmentId,
+            @RequestHeader(value = ON_BEHALF_OF_HEADER, required = false) Long onBehalfOfUserId,
             Authentication authentication) {
-        if (isBot(authentication)) {
-            try {
-                Request updatedRequest = requestService.updateRequesterDepartment(channelId, departmentId, 0L); // 0 = bot
-                return ResponseEntity.ok(updatedRequest);
-            } catch (RuntimeException e) {
-                return ResponseEntity.notFound().build();
-            }
+        Actor actor;
+        try {
+            actor = actorResolver.resolve(authentication, onBehalfOfUserId);
+        } catch (ActorResolutionException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Long discordUserId = resolveDiscordUserId(authentication);
-            if (discordUserId == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
-            Request updatedRequest = requestService.updateRequesterDepartment(channelId, departmentId, discordUserId);
-            return ResponseEntity.ok(updatedRequest);
+            return ResponseEntity.ok(requestService.updateRequesterDepartment(channelId, departmentId, actor));
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
     }
-    
+
     @PatchMapping("/requests/channel/{channelId}/requester/{requesterId}")
     public ResponseEntity<Request> updateRequester(
             @PathVariable Long channelId,
             @PathVariable Long requesterId,
+            @RequestHeader(value = ON_BEHALF_OF_HEADER, required = false) Long onBehalfOfUserId,
             Authentication authentication) {
-        if (isBot(authentication)) {
-            try {
-                Request updatedRequest = requestService.updateRequester(channelId, requesterId, 0L); // 0 = bot
-                return ResponseEntity.ok(updatedRequest);
-            } catch (RuntimeException e) {
-                return ResponseEntity.notFound().build();
-            }
+        Actor actor;
+        try {
+            actor = actorResolver.resolve(authentication, onBehalfOfUserId);
+        } catch (ActorResolutionException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Long discordUserId = resolveDiscordUserId(authentication);
-            if (discordUserId == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
-            Request updatedRequest = requestService.updateRequester(channelId, requesterId, discordUserId);
-            return ResponseEntity.ok(updatedRequest);
+            return ResponseEntity.ok(requestService.updateRequester(channelId, requesterId, actor));
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
@@ -268,101 +232,56 @@ public class CommandCentreController {
 
     @GetMapping("/requests/countByDepartment")
     public ResponseEntity<List<DepartmentCount>> countRequestsByDepartment(Authentication authentication) {
-        if (!isBot(authentication) && resolveDiscordUserId(authentication) == null) {
+        try {
+            actorResolver.resolve(authentication, null);
+        } catch (ActorResolutionException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            List<DepartmentCount> counts = requestService.getRequestCountsByDepartment();
-            return ResponseEntity.ok(counts);
+            return ResponseEntity.ok(requestService.getRequestCountsByDepartment());
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
     }
-    
-    
+
+
     // ========== Audit Event Endpoints ==========
-    
+
     @GetMapping("/audit-events")
     public ResponseEntity<List<AuditEvent>> getAllAuditEvents() {
         return ResponseEntity.ok(auditEventService.getAllAuditEvents());
     }
-    
+
     @GetMapping("/audit-events/{id}")
     public ResponseEntity<AuditEvent> getAuditEventById(@PathVariable Long id) {
         return auditEventService.getAuditEventById(id)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }
-    
+
     @GetMapping("/audit-events/entity/{entityType}/{entityId}")
     public ResponseEntity<List<AuditEvent>> getAuditEventsByEntity(
-            @PathVariable String entityType, 
+            @PathVariable String entityType,
             @PathVariable Long entityId) {
         return ResponseEntity.ok(auditEventService.getAuditEventsByEntityTypeAndId(entityType, entityId));
     }
-    
+
     @GetMapping("/audit-events/type/{eventType}")
     public ResponseEntity<List<AuditEvent>> getAuditEventsByType(@PathVariable String eventType) {
         return ResponseEntity.ok(auditEventService.getAuditEventsByEventType(eventType));
     }
-    
+
     @GetMapping("/audit-events/user/{performedBy}")
     public ResponseEntity<List<AuditEvent>> getAuditEventsByUser(@PathVariable String performedBy) {
         return ResponseEntity.ok(auditEventService.getAuditEventsByPerformedBy(performedBy));
     }
-    
+
     @GetMapping("/audit-events/daterange")
     public ResponseEntity<List<AuditEvent>> getAuditEventsByDateRange(
-            @RequestParam String start, 
+            @RequestParam String start,
             @RequestParam String end) {
         LocalDateTime startDate = LocalDateTime.parse(start);
         LocalDateTime endDate = LocalDateTime.parse(end);
         return ResponseEntity.ok(auditEventService.getAuditEventsByDateRange(startDate, endDate));
-    }
-    
-    @PostMapping("/audit-events")
-    public ResponseEntity<AuditEvent> createAuditEvent(
-            @RequestParam String eventType,
-            @RequestParam String entityType,
-            @RequestParam Long entityId,
-            @RequestParam String eventDetails,
-            @RequestParam String performedBy) {
-        AuditEvent auditEvent = auditEventService.logEvent(
-            eventType, entityType, entityId, eventDetails, performedBy);
-        return ResponseEntity.status(HttpStatus.CREATED).body(auditEvent);
-    }
-
-    private Long resolveDiscordUserId(Authentication authentication) {
-        if (authentication == null) {
-            return null;
-        }
-        Object principal = authentication.getPrincipal();
-        if (principal instanceof OAuth2User oauth2User) {
-            String id = oauth2User.getAttribute("id");
-            if (id == null) {
-                return null;
-            }
-            return Long.parseLong(id);
-        }
-        if (principal instanceof String principalId) {
-            try {
-                return Long.parseLong(principalId);
-            } catch (NumberFormatException ex) {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    private boolean isBot(Authentication authentication) {
-        if (authentication == null) {
-            return false;
-        }
-        for (GrantedAuthority authority : authentication.getAuthorities()) {
-            if ("ROLE_BOT".equals(authority.getAuthority())) {
-                return true;
-            }
-        }
-        return false;
     }
 }
