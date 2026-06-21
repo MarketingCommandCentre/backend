@@ -2,7 +2,10 @@ package com.ibrasoft.commandcentre.model;
 
 public enum RequestType {
     POST("post"),
-    REEL("reel");
+    REEL("reel"),
+    MISC("misc"),
+    WEBSITE("website"),
+    PHOTOGRAPHY("photography");
 
     private final String displayName;
 
