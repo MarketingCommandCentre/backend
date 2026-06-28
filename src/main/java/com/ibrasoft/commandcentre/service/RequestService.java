@@ -66,7 +66,8 @@ public class RequestService {
 
         request.setRequesterDepartmentID(requestDetails.getRequesterDepartmentID());
         request.setAssignedToID(requestDetails.getAssignedToID());
-
+        request.setRequestType(requestDetails.getRequestType());
+        
         request.setTitle(requestDetails.getTitle());
         request.setDescription(requestDetails.getDescription());
         request.setStatus(requestDetails.getStatus());
