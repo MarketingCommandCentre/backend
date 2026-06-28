@@ -27,16 +27,13 @@ public class Request {
      * This includes stuff like channel IDs, message IDs, guild IDs, etc.
      */
 
-    @Column(nullable = true)
     private Long requesterID;
 
-    @Column(nullable = true)
     private Long requesterDepartmentID;
 
-    @Column(nullable = true)
     private Long assignedToID;
 
-    @Column(name = "additionalAsigneeID", nullable = true)
+    @Column(name = "additionalAsigneeID")
     private Long additionalAssigneeID;
 
     @NotNull
@@ -50,36 +47,32 @@ public class Request {
      */
 
     @Size(max = 255)
-    @Column(nullable = true)
     private String title;
 
     @Size(max = 4000)
-    @Column(length = 4000, nullable = true)
+    @Column(length = 4000)
     private String description;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = true)
     private RequestType requestType;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = true)
     private RequestStatus status;
 
-    @Column(nullable = true)
     private LocalDate postingDate;
 
-    @Column(nullable = true)
+    @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @Column(nullable = true)
+    @Column(nullable = false)
     private LocalDateTime updatedAt;
 
     @Size(max = 255)
-    @Column(nullable = true)
+    @Column(length = 255, nullable = true)
     private String room;
 
     @Size(max = 255)
-    @Column(nullable = true)
+    @Column(length = 255, nullable = true)
     private String signupUrl;
 
     @PrePersist
