@@ -9,12 +9,17 @@ import java.util.List;
 
 @Repository
 public interface AuditEventRepository extends JpaRepository<AuditEvent, Long> {
-    
-    List<AuditEvent> findByEntityTypeAndEntityId(String entityType, Long entityId);
-    
-    List<AuditEvent> findByEventType(String eventType);
-    
-    List<AuditEvent> findByPerformedBy(String performedBy);
-    
-    List<AuditEvent> findByEventTimestampBetween(LocalDateTime start, LocalDateTime end);
+
+    // Newest-first ordering. Id is the tiebreak for events sharing a timestamp
+    // (several can land in the same millisecond).
+
+    List<AuditEvent> findAllByOrderByEventTimestampDescIdDesc();
+
+    List<AuditEvent> findByEntityTypeAndEntityIdOrderByEventTimestampDescIdDesc(String entityType, Long entityId);
+
+    List<AuditEvent> findByEventTypeOrderByEventTimestampDescIdDesc(String eventType);
+
+    List<AuditEvent> findByPerformedByOrderByEventTimestampDescIdDesc(String performedBy);
+
+    List<AuditEvent> findByEventTimestampBetweenOrderByEventTimestampDescIdDesc(LocalDateTime start, LocalDateTime end);
 }

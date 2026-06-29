@@ -1,6 +1,7 @@
 package com.ibrasoft.commandcentre.service;
 
 import com.ibrasoft.commandcentre.audit.Actor;
+import com.ibrasoft.commandcentre.audit.AuditEventType;
 import com.ibrasoft.commandcentre.model.DepartmentCount;
 import com.ibrasoft.commandcentre.model.Request;
 import com.ibrasoft.commandcentre.model.RequestStatus;
@@ -54,7 +55,7 @@ public class RequestService {
         }
 
         Request savedRequest = requestRepository.save(request);
-        auditEventService.logRequestEvent("CREATE", savedRequest.getChannelID(),
+        auditEventService.logRequestEvent(AuditEventType.CREATE, savedRequest.getChannelID(),
             "Request created: " + savedRequest.getTitle(), actor);
         return savedRequest;
     }
@@ -76,7 +77,7 @@ public class RequestService {
         request.setSignupUrl(requestDetails.getSignupUrl());
 
         Request updatedRequest = requestRepository.save(request);
-        auditEventService.logRequestEvent("UPDATE", updatedRequest.getChannelID(),
+        auditEventService.logRequestEvent(AuditEventType.UPDATE, updatedRequest.getChannelID(),
             "Request updated: " + updatedRequest.getTitle(), actor);
         return updatedRequest;
     }
@@ -86,7 +87,7 @@ public class RequestService {
         Request request = requestRepository.findById(channelId)
             .orElseThrow(() -> new RuntimeException("Request not found with channelId: " + channelId));
 
-        auditEventService.logRequestEvent("DELETE", channelId,
+        auditEventService.logRequestEvent(AuditEventType.DELETE, channelId,
             "Request deleted: " + request.getTitle(), actor);
         requestRepository.deleteById(channelId);
     }
@@ -100,8 +101,14 @@ public class RequestService {
         request.setAssignedToID(assignedToId);
 
         Request updatedRequest = requestRepository.save(request);
-        auditEventService.logRequestEvent("ASSIGN", channelId,
-            String.format("Request assigned from %s to %s", previousAssignee, assignedToId), actor);
+        boolean cleared = assignedToId == null;
+        auditEventService.logRequestEvent(
+            cleared ? AuditEventType.UNASSIGN : AuditEventType.ASSIGN,
+            channelId,
+            cleared
+                ? String.format("Request unassigned (was %s)", previousAssignee)
+                : String.format("Request assigned from %s to %s", previousAssignee, assignedToId),
+            actor);
         return updatedRequest;
     }
 
@@ -114,7 +121,7 @@ public class RequestService {
         request.setStatus(status);
 
         Request updatedRequest = requestRepository.save(request);
-        auditEventService.logRequestEvent("STATUS_CHANGE", channelId,
+        auditEventService.logRequestEvent(AuditEventType.STATUS_CHANGE, channelId,
             String.format("Status changed from %s to %s", previousStatus.getDisplayName(), status.getDisplayName()), actor);
         return updatedRequest;
     }
@@ -147,7 +154,7 @@ public class RequestService {
 
         request.setStatus(nextStatus);
         Request updatedRequest = requestRepository.save(request);
-        auditEventService.logRequestEvent("STATUS_ADVANCE", channelId,
+        auditEventService.logRequestEvent(AuditEventType.STATUS_ADVANCE, channelId,
             String.format("Status advanced from %s to %s", currentStatus.getDisplayName(), nextStatus.getDisplayName()), actor);
         return updatedRequest;
     }
@@ -161,7 +168,7 @@ public class RequestService {
         request.setRequesterDepartmentID(requesterDepartmentID);
 
         Request updatedRequest = requestRepository.save(request);
-        auditEventService.logRequestEvent("DEPARTMENT_UPDATE", channelId,
+        auditEventService.logRequestEvent(AuditEventType.DEPARTMENT_UPDATE, channelId,
             String.format("Requester department changed from %s to %s", previousDepartment, requesterDepartmentID), actor);
         return updatedRequest;
     }
@@ -175,7 +182,7 @@ public class RequestService {
         request.setRequesterID(requesterID);
 
         Request updatedRequest = requestRepository.save(request);
-        auditEventService.logRequestEvent("REQUESTER_UPDATE", channelId,
+        auditEventService.logRequestEvent(AuditEventType.REQUESTER_UPDATE, channelId,
             String.format("Requester changed from %s to %s", previousRequester, requesterID), actor);
         return updatedRequest;
     }

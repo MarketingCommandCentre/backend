@@ -83,7 +83,10 @@ public class DiscordGuildFilter extends OncePerRequestFilter {
             path.startsWith("/oauth2") || 
             path.equals("/") ||
             path.startsWith("/error") ||
-            path.startsWith("/api/auth/")) {
+            path.startsWith("/api/auth/") ||
+            path.startsWith("/v3/")
+        
+        ) {
             return true;
         }
         

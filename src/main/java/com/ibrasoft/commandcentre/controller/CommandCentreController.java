@@ -1,8 +1,12 @@
 package com.ibrasoft.commandcentre.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ibrasoft.commandcentre.audit.Actor;
+import com.ibrasoft.commandcentre.audit.AuditEventType;
 import com.ibrasoft.commandcentre.audit.AuthenticationActorResolver;
 import com.ibrasoft.commandcentre.audit.AuthenticationActorResolver.ActorResolutionException;
+import com.ibrasoft.commandcentre.controller.dto.AuditEventRequest;
 import com.ibrasoft.commandcentre.model.AuditEvent;
 import com.ibrasoft.commandcentre.model.DepartmentCount;
 import com.ibrasoft.commandcentre.model.Request;
@@ -30,6 +34,7 @@ public class CommandCentreController {
     private final RequestService requestService;
     private final AuditEventService auditEventService;
     private final AuthenticationActorResolver actorResolver;
+    private final ObjectMapper objectMapper;
 
     // ========== Request Endpoints ==========
 
@@ -246,6 +251,37 @@ public class CommandCentreController {
 
 
     // ========== Audit Event Endpoints ==========
+
+    @PostMapping("/audit-events")
+    public ResponseEntity<?> createAuditEvent(
+            @RequestBody AuditEventRequest body,
+            @RequestHeader(value = ON_BEHALF_OF_HEADER, required = false) Long onBehalfOfUserId,
+            Authentication authentication) {
+        Actor actor;
+        try {
+            actor = actorResolver.resolve(authentication, onBehalfOfUserId);
+        } catch (ActorResolutionException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        if (body == null || body.entityId() == null) {
+            return ResponseEntity.badRequest().body("entityId is required");
+        }
+        AuditEventType eventType = AuditEventType.fromString(body.eventType()).orElse(null);
+        if (eventType == null) {
+            return ResponseEntity.badRequest().body("Invalid eventType: " + body.eventType());
+        }
+
+        String metadataJson = null;
+        JsonNode metadata = body.metadata();
+        if (metadata != null && !metadata.isNull()) {
+            metadataJson = metadata.toString();
+        }
+
+        AuditEvent saved = auditEventService.logEvent(
+            eventType, body.entityType(), body.entityId(), body.eventDetails(), metadataJson, actor);
+        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+    }
 
     @GetMapping("/audit-events")
     public ResponseEntity<List<AuditEvent>> getAllAuditEvents() {

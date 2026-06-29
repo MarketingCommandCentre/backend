@@ -39,6 +39,14 @@ public class AuditEvent {
     @NotBlank
     private String performedBy;
 
+    /**
+     * Optional structured detail as a JSON string (e.g. {@code {"assigneeIds":["123"],"via":"role"}}).
+     * Complements the human-readable {@link #eventDetails} summary. Nullable; snowflake IDs are stored
+     * as strings to avoid precision loss on the JS frontend.
+     */
+    @Column(columnDefinition = "TEXT")
+    private String metadata;
+
     @Column(nullable = false)
     private LocalDateTime eventTimestamp;
 

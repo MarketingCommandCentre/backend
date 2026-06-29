@@ -32,7 +32,8 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable()) // Disable CSRF for API usage
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/", "/login/**", "/oauth2/**", "/error", "/api/auth/**", "/api/workload/**").permitAll()
+                .requestMatchers("/", "/login/**", "/oauth2/**", "/error", "/api/auth/**", "/api/workload/**", "/v3/api-docs").permitAll()
+
                 .anyRequest().authenticated()
             )
             .oauth2Login(oauth2 -> oauth2
