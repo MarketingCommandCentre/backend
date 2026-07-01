@@ -1,0 +1,15 @@
+target/
+*.db
+*.db-shm
+*.db-wal
+certs/
+docs/
+*.csv
+*.md
+*.sh
+.env
+.env.*
+.git
+.gitignore
+.idea/
+*.iml
