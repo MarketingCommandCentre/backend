@@ -33,7 +33,20 @@ This is a Spring Boot backend API using SQLite as the database with comprehensiv
 ### Authentication Endpoints
 - `GET /api/auth/success` - OAuth success payload (includes JWT)
 - `GET /api/auth/user` - Current user info (JWT or OAuth)
-- `POST /api/auth/bot-token` - Issue long-lived bot JWT (requires `X-Bot-Key`)
+
+### Authorization (roles)
+Access to `/api/**` is decided by the `roles` claim of the JWT sent as `Authorization: Bearer <jwt>`:
+
+| Caller | Role | Allowed |
+| --- | --- | --- |
+| Dashboard user (JWT issued after Discord login) | `ROLE_USER` | `GET /api/**`, plus `POST /api/discord/users/bulk` and `POST /api/discord/roles/bulk` (read-only lookups) |
+| Discord bot | `ROLE_BOT` | Everything, including every `POST`/`PUT`/`PATCH`/`DELETE` under `/api/**` |
+
+- `/api/auth/**`, `/login/**`, `/oauth2/**`, `/error`, `/` and `/v3/api-docs` are public. `/api/workload/**` is not: it needs `ROLE_USER` or `ROLE_BOT` like the rest of `/api/**`.
+- Only the role names in `model/Role.java` are honoured. A token with a missing/empty `roles` claim, or with only unknown roles, grants nothing and is treated as unauthenticated.
+- Unauthenticated requests are redirected to the Discord login (302); authenticated callers without the required role get 403.
+- `/api/**` data endpoints are JWT-only: a browser session from the Discord OAuth login has no `ROLE_USER`, so it gets 403 there. It can still use `/api/auth/**`.
+- The bot's token must carry `ROLE_BOT`. Generate it with the `generate-bot-token` profile (`config/BotTokenGenerator.java`), which signs it with the configured `security.jwt.secret`; rotating that secret invalidates every existing token, so regenerate the bot token afterwards.
 
 ### Request Endpoints
 - `GET /api/requests` - Get all requests
