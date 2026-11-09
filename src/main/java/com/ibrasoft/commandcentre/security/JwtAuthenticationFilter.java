@@ -33,9 +33,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 JwtClaims claims = jwtService.parseToken(token);
                 List<SimpleGrantedAuthority> authorities = JwtAuthConverter.toAuthorities(claims.roles());
-                UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(claims.subject(), token, authorities);
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                if (authorities.isEmpty()) {
+                    // A token without a recognised role grants nothing: treat it like no token.
+                    log.warn("JWT for subject {} carries no recognised role; ignoring it", claims.subject());
+                } else {
+                    UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(claims.subject(), token, authorities);
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
             } catch (Exception ex) {
                 log.warn("Invalid JWT provided: {}", ex.getMessage());
             }

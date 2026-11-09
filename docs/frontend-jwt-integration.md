@@ -58,18 +58,24 @@ Authorization: Bearer <jwt>
 - Clear the stored JWT.
 - Redirect user to login page or show unauthenticated UI.
 
-## 6) Bot authentication (if applicable to the frontend)
+## 6) Roles: the dashboard is read-only
 
-If the frontend needs to trigger bot token issuance:
-- Call `POST /api/auth/bot-token` with header `X-Bot-Key: <configured key>`.
-- Store the returned bot JWT separately if it is used in special admin tooling.
+The JWT's `roles` claim decides what a caller may do under `/api/**`:
 
-> Note: If bot tokens are only used by backend services or the Discord bot itself, the frontend does not need to implement this.
+- `ROLE_USER` (the token minted after Discord login): `GET /api/**`, plus `POST /api/discord/users/bulk` and `POST /api/discord/roles/bulk` (read-only name lookups). Every other `POST`/`PUT`/`PATCH`/`DELETE` returns `403`.
+- `ROLE_BOT` (the Discord bot's token): full access, including all writes.
+- `/api/workload/**` requires a token like the rest of `/api/**`; it is no longer public.
+- A token with no recognised role grants nothing.
+
+API calls must use the JWT. The Discord OAuth browser session alone does not carry `ROLE_USER`, so data endpoints answer it with `403`; only `/api/auth/**` works with the session.
+
+The bot token is not issued by an endpoint. It is generated offline with the backend's `generate-bot-token` profile (see `config/BotTokenGenerator.java`) and must carry `ROLE_BOT`; the frontend never needs it.
 
 ## 7) Error handling and UX
 
 - On any `401 Unauthorized`, clear the JWT and show the login screen.
-- On `403 Forbidden`, show a message explaining the user must be in the required Discord server.
+- On `403 Forbidden` with code `NOT_IN_GUILD`, show a message explaining the user must be in the required Discord server.
+- On any other `403 Forbidden`, the caller lacks the role for that action (for a dashboard user: any write).
 
 ## 8) Configuration reminders
 

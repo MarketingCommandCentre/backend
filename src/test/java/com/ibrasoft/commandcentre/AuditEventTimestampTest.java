@@ -6,7 +6,6 @@ import com.ibrasoft.commandcentre.repository.AuditEventRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -20,8 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * ISO-8601 with an explicit UTC offset. A zone-less value here is what made the dashboard
  * render events in the API host's wall-clock time instead of the viewer's.
  */
-@SpringBootTest
-class AuditEventTimestampTest {
+class AuditEventTimestampTest extends AbstractIntegrationTest {
 
     @Autowired
     private AuditEventRepository auditEventRepository;
