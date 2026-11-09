@@ -4,7 +4,7 @@
 This is a Spring Boot backend API using SQLite as the database with comprehensive CRUD operations for Requests and Audit Events.
 
 ## Technology Stack
-- **Spring Boot 3.5.7**
+- **Spring Boot 3.5.16**
 - **Java 21**
 - **SQLite Database**
 - **Spring Data JPA**

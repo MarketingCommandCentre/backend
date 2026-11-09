@@ -10,3 +10,9 @@ security.jwt.bot-ttl-seconds=31536000
 
 # Shared secret for issuing bot JWTs
 bot.api.key=
+
+# OpenAPI docs (springdoc). /v3/api-docs is permitted without login in SecurityConfig,
+# so disable the docs endpoints in production. No application code or test depends on them.
+# Equivalent env vars: SPRINGDOC_API_DOCS_ENABLED=false, SPRINGDOC_SWAGGER_UI_ENABLED=false
+#springdoc.api-docs.enabled=false
+#springdoc.swagger-ui.enabled=false
